@@ -215,7 +215,7 @@ SFA Session + 名言集 + 今回の一文を `prompts/Content_Builder_v1.md` と
 
 `【問い】【フレーミング】【比喩】【ユーモア】【心理的安全性】【組織開発】【感情喚起】
 【現場転移】【リーダーシップ】【学習理論】【介入】【観察】【参加者反応】【名言】
-【Prototype Kitchen】【啐啄同時】`
+【Prototype Kitchen】【啐啄同時】【Iメッセージ】`
 
 定義は `SFA/07_lexicon/concept_lexicon.md` を参照。新しいタグを追加する場合は、
 このファイル・`templates/session_template.md`・各プロンプトのタグ一覧を同時に更新すること。
