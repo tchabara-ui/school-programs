@@ -7,14 +7,14 @@ raw log (Limitless Pendant の書き出しテキスト) を読み込み、以下
 
 処理内容:
   1. raw log 読み込み
-  2. タイムスタンプ・タイムライン表記の削除
-  3. Unknown話者行の削除
-  4. フィラー（あの／えっと 等）の削除
-  5. 単独の相づち行（はい／うん／そうですね 等）の削除
-  6. 連続する重複行の削除
-  7. 誤変換辞書（dictionaries/replacement_dictionary.yml）の適用
-  8. cleaned text の保存
-  9. （任意）SFA_Builder_v1.md と合体させた「プロンプトパッケージ」の生成
+  2. 「話者名 (日付 時刻): 発言」ヘッダーの分離・タイムスタンプ削除
+     （話者が Unknown の場合はラベルごと削除し、発言内容のみ残す）
+  3. フィラー（あの／えっと 等）の削除
+  4. 単独の相づち行（はい／うん／そうですね 等）の削除
+  5. 連続する重複行の削除
+  6. 誤変換辞書（dictionaries/replacement_dictionary.yml）の適用
+  7. cleaned text の保存
+  8. （任意）SFA_Builder_v1.md と合体させた「プロンプトパッケージ」の生成
 
 使い方:
   python3 scripts/clean_limitless_log.py SFA/00_raw_logs/raw_20260702.txt \\
@@ -48,13 +48,13 @@ TIMESTAMP_PATTERNS = [
     re.compile(r"\(\d{1,2}:\d{2}(:\d{2})?\)"),          # (00:12) (00:12:34)
     re.compile(r"^\d{1,2}:\d{2}(:\d{2})?\s*[-–—]\s*"),   # 00:12:34 - (行頭)
     re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?"),  # 2026-07-02 10:23:11
+    re.compile(r"\(\d{1,2}/\d{1,2}/\d{2}\s+\d{1,2}:\d{2}\s*(AM|PM)\)"),  # (7/2/26 9:48 AM)
 ]
 
-# Unknown話者行のパターン（行全体がUnknown発言とみなせるもの）
-UNKNOWN_LINE_PATTERNS = [
-    re.compile(r"^\s*\*{0,2}Unknown\*{0,2}\s*[:：]"),
-    re.compile(r"^\s*\*{0,2}Unknown\*{0,2}\s*$"),
-]
+# Limitlessの書き出し形式「- 話者名 (日付 時刻): 発言」からヘッダーを分離するパターン
+SPEAKER_TIMESTAMP_HEADER_PATTERN = re.compile(
+    r"^-?\s*(?P<speaker>[^\(\):：\n]{1,30}?)\s*\([^()]*\)\s*[:：]\s*(?P<content>.*)$"
+)
 
 # フィラー（意味を持たない語）。長い語から先にマッチさせるため長さ降順で使用する。
 FILLER_WORDS = [
@@ -110,8 +110,23 @@ def strip_timestamps(line: str) -> str:
     return line
 
 
-def is_unknown_line(line: str) -> bool:
-    return any(pattern.search(line) for pattern in UNKNOWN_LINE_PATTERNS)
+def strip_speaker_header(line: str) -> tuple[str, bool]:
+    """「- 話者名 (日付 時刻): 発言」形式のヘッダーを取り除く。
+
+    話者が "Unknown"（未識別）の場合はラベルごと削除して発言内容だけを残す。
+    話者名が判明している場合は "話者名: 発言" の形に残し、タイムスタンプ部分のみ削る。
+    戻り値は (処理後の行, Unknownラベルを削除したか) のタプル。
+    """
+    match = SPEAKER_TIMESTAMP_HEADER_PATTERN.match(line)
+    if not match:
+        return line, False
+
+    speaker = match.group("speaker").strip()
+    content = match.group("content").strip()
+
+    if speaker == "Unknown":
+        return content, True
+    return f"{speaker}: {content}", False
 
 
 def remove_fillers(line: str) -> str:
@@ -169,7 +184,7 @@ def clean_text(raw_text: str, dict_pairs: list[tuple[str, str]],
                 anon_pairs: list[tuple[str, str]]) -> tuple[str, dict]:
     stats = {
         "input_lines": 0,
-        "removed_unknown_lines": 0,
+        "stripped_unknown_labels": 0,
         "removed_aizuchi_lines": 0,
         "removed_duplicate_lines": 0,
         "dict_replacements": 0,
@@ -181,11 +196,11 @@ def clean_text(raw_text: str, dict_pairs: list[tuple[str, str]],
 
     kept_lines: list[str] = []
     for line in lines:
+        line, stripped_unknown = strip_speaker_header(line.strip())
         line = strip_timestamps(line).strip()
 
-        if is_unknown_line(line):
-            stats["removed_unknown_lines"] += 1
-            continue
+        if stripped_unknown:
+            stats["stripped_unknown_labels"] += 1
 
         if not line:
             kept_lines.append(line)
