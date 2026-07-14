@@ -130,6 +130,21 @@ SFA/06_blog/SFA-20260702-001_yaoichi_prototype-kitchen_blog.md
 
 ---
 
+## 自動実行(Claude Codeスキル)
+
+Claude Code上でこのリポジトリを開き、Limitless MCPが接続された状態であれば、
+`.claude/skills/sfa-run/SKILL.md` のスキルが以下を一気通貫で行う。
+
+1. 対象日のLimitlessログを自動取得(手動貼り付け不要)
+2. 機械クリーニング → SFA Session/AI分析/名言集/SNS/ブログの生成まで自動
+3. SFA Session(正本)をビューワー公開してレビュー
+4. 確認後、`09_exports/`への書き出しとコミット・PR作成
+
+下記「クイックスタート」は、スキルを使わず手動で1ステップずつ進める場合の手順
+(スキルが使えない環境向け・処理内容の参照用)。
+
+---
+
 ## クイックスタート
 
 ### 1. raw logを配置する
