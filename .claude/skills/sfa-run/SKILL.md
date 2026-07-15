@@ -1,6 +1,6 @@
 ---
 name: sfa-run
-description: "Use this skill to run the full SFA (Soulmate Facilitation Archive) pipeline end-to-end in this repo: fetch a Limitless Pendant recording for a given date/time range, clean it, and generate all 7 SFA deliverables (SFA Session, AI analysis, quotes/questions/framings, Facebook post, Instagram post, blog post, core line). Trigger when the user asks to run SFA, process a Limitless recording, build an SFA session for a date, or references the SFA pipeline / Soulmate Facilitation Archive / SFA-YYYYMMDD."
+description: "Use this skill to run the full SFA (Soulmate Facilitation Archive) pipeline end-to-end in this repo: fetch a Limitless Pendant recording for a given date/time range (or convert audio/Word/text files dropped in SFA/00_inbox/), clean it, and generate all 7 SFA deliverables (SFA Session, AI analysis, quotes/questions/framings, Facebook post, Instagram post, blog post, core line). Trigger when the user asks to run SFA, process a Limitless recording, process files in the inbox, transcribe an audio file from another app/company, build an SFA session for a date, or references the SFA pipeline / Soulmate Facilitation Archive / SFA-YYYYMMDD."
 ---
 
 # SFA Run — Soulmate Facilitation Archive 一気通貫パイプライン
@@ -16,7 +16,10 @@ Claude Code内で完結させる)。
 
 ## 実行前提
 
-- Limitless MCP(`mcp__limitless__searchLifelogsWithTranscripts`)が利用可能なこと
+- Limitlessから取得する場合: Limitless MCP(`mcp__limitless__searchLifelogsWithTranscripts`)
+  が利用可能なこと
+- 受信箱の音声ファイルを処理する場合: `ffmpeg` がインストール済みであること、
+  `OPENAI_API_KEY`(環境変数)または `~/.openai_key` が設定済みであること
 - 背景ジョブとして実行する場合は、先に EnterWorktree でこのリポジトリを隔離してから
   ファイルを書き込むこと(共有チェックアウトへの直接書き込みは拒否される)
 
@@ -34,7 +37,12 @@ Claude Code内で完結させる)。
 **Session ID** を決定する: `SFA-YYYYMMDD-###_client_theme`
 `SFA/00_raw_logs/` を確認し、同日の既存セッションがあれば `###` をインクリメントする。
 
-## ステップ1: Limitlessからログ取得
+## ステップ1: 原本ログの取得
+
+情報源は2種類ある。ユーザーの依頼内容に応じてどちらかを選ぶ(両方使う場合は
+セッション内で複数の情報源を時系列に連結してよい)。
+
+### 1-A. Limitlessから
 
 `mcp__limitless__searchLifelogsWithTranscripts` で対象日を検索する。
 
@@ -47,6 +55,34 @@ Claude Code内で完結させる)。
 - 各結果の `text` フィールドは、すでに `- 話者 (M/D/YY H:MM AM/PM): 発言内容` の
   1行1発言形式になっている(`clean_limitless_log.py` がそのまま読める形式)。
   複数エントリの `text` を時系列順に連結すればよい。
+- 大量件数を1回のAPI呼び出しでまとめて取れる場合は `scripts/fetch_lifelog.py`
+  (直接REST API、1回100件まで)の利用も検討する。
+
+### 1-B. 受信箱(`SFA/00_inbox/`)から
+
+Limitless以外の音声ファイル・Word文書・テキストファイルは、`SFA/00_inbox/` に
+置いてもらい、以下のスクリプトでプレーンテキストに変換してから連結する。
+ファイル形式の変換は機械的な工程なのでスクリプトに任せ、どのファイルをどの
+セッションにまとめるか(複数日にまたがる場合の順序など)はステップ0の聞き取りで
+ユーザーに確認する。
+
+```bash
+python3 scripts/intake_convert.py SFA/00_inbox/<ファイル名> --output /tmp/intake_<n>.txt
+```
+
+- 音声(`.m4a` `.mp3` `.wav` `.mp4` `.mov` `.aac` `.flac` `.ogg`):
+  `scripts/transcribe_audio.py` を内部で呼び出し、OpenAI Whisper APIで文字起こしする。
+  - 環境変数 `OPENAI_API_KEY` または `~/.openai_key` にAPIキーが必要
+    (**リポジトリ内のファイルに直接書き込まないこと**。未設定ならユーザーに確認する)
+  - 話者分離は行わない(全発言が地の文になる)。Session Metadataの「人数」欄や
+    本文中で、話者が特定できない旨を明記すること
+  - 25MBを超える音声は自動でチャンク分割して順に送信される
+- Word(`.docx`): markitdownでテキスト抽出
+- テキスト(`.txt` `.md`): そのまま読み込み(Limitless形式ならそのまま解釈できる)
+
+変換が終わったら、複数ファイルの出力を時系列順に連結してステップ2に進む。
+処理済みの原本ファイルは `SFA/00_inbox/_done/<SessionID>/` に移動し、
+受信箱には残さない(原本は消さずに保管する)。
 
 ## ステップ2: raw logとして保存
 

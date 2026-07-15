@@ -53,9 +53,13 @@ school-programs/
 ├── dictionaries/
 │   └── replacement_dictionary.yml  ← ASR誤変換修正辞書（追加・更新可能）
 ├── scripts/
-│   └── clean_limitless_log.py      ← raw log の機械的クリーニング（Python）
+│   ├── clean_limitless_log.py      ← raw log の機械的クリーニング（Python）
+│   ├── fetch_lifelog.py            ← Limitless REST APIから直接ログ取得
+│   ├── intake_convert.py           ← 受信箱ファイル(音声/Word/テキスト)→プレーンテキスト変換
+│   └── transcribe_audio.py         ← 音声ファイルの文字起こし（OpenAI Whisper API）
 └── SFA/                             ← 実データ置き場（セッションごとに増えていく）
-    ├── 00_raw_logs/                 ← Limitlessからの生ログ。改変禁止・原本保管
+    ├── 00_inbox/                    ← 受信箱。Limitless以外の音声/Word/テキストをここに置く
+    ├── 00_raw_logs/                 ← 生ログ（Limitless由来／受信箱由来とも）。改変禁止・原本保管
     ├── 01_cleaned_text/             ← スクリプトによる機械クリーニング後のテキスト
     ├── 02_sessions/                 ← 【正本】SFA Session（確定版）
     ├── 03_analysis/                 ← AI分析
@@ -132,13 +136,32 @@ SFA/06_blog/SFA-20260702-001_yaoichi_prototype-kitchen_blog.md
 
 ## 自動実行(Claude Codeスキル)
 
-Claude Code上でこのリポジトリを開き、Limitless MCPが接続された状態であれば、
-`.claude/skills/sfa-run/SKILL.md` のスキルが以下を一気通貫で行う。
+Claude Code上でこのリポジトリを開けば、`.claude/skills/sfa-run/SKILL.md` のスキルが
+以下を一気通貫で行う。情報源はLimitlessに限らない。
 
-1. 対象日のLimitlessログを自動取得(手動貼り付け不要)
+1. 対象日のLimitlessログを自動取得、または `SFA/00_inbox/` に置いた音声・Word・
+   テキストファイルを自動変換(手動貼り付け不要)
 2. 機械クリーニング → SFA Session/AI分析/名言集/SNS/ブログの生成まで自動
 3. SFA Session(正本)をビューワー公開してレビュー
 4. 確認後、`09_exports/`への書き出しとコミット・PR作成
+
+### Limitless以外の音声・文書を取り込む(受信箱)
+
+他社からもらった音声ファイルや、既に文字起こし済みのWord文書・テキストは、
+`SFA/00_inbox/` に置いて「inboxを処理して」のように声をかければよい。
+ファイル形式ごとに以下のように変換される(スクリプトが機械的に行う。
+どのファイルをどのセッションにまとめるかはClaudeとの聞き取りで確認する)。
+
+| 形式 | 変換方法 |
+|---|---|
+| 音声(`.m4a` `.mp3` `.wav` `.mp4` `.mov` `.aac` `.flac` `.ogg`) | OpenAI Whisper APIで文字起こし(`scripts/transcribe_audio.py`)。要 `ffmpeg` と `OPENAI_API_KEY` |
+| Word(`.docx`) | markitdownでテキスト抽出 |
+| テキスト(`.txt` `.md`) | そのまま読み込み |
+
+音声の文字起こしは話者分離を行わない(全発言が地の文になる)。
+処理済みの原本は `SFA/00_inbox/_done/<SessionID>/` に移動され、受信箱には残らない
+(削除はしない)。`OPENAI_API_KEY` は環境変数または `~/.openai_key` から読み込む。
+**APIキーをこのリポジトリ内のファイルに書き込んではいけない**(公開リポジトリのため)。
 
 下記「クイックスタート」は、スキルを使わず手動で1ステップずつ進める場合の手順
 (スキルが使えない環境向け・処理内容の参照用)。
