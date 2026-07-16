@@ -56,6 +56,13 @@ SPEAKER_TIMESTAMP_HEADER_PATTERN = re.compile(
     r"^-?\s*(?P<speaker>[^\(\):：\n]{1,30}?)\s*\([^()]*\)\s*[:：]\s*(?P<content>.*)$"
 )
 
+# Limitlessの一部の書き出しで、日本語の文字間に不要な半角/全角スペースが
+# 挿入される現象が確認されている（例:「ゲーム 末 で」）。仮名・漢字どうしの間に
+# 挟まったスペースのみを除去する（英数字・記号の前後の意図的なスペースは保持）。
+INTERCHAR_JP_SPACE_PATTERN = re.compile(
+    r"(?<=[぀-ヿ一-鿿])[ 　]+(?=[぀-ヿ一-鿿])"
+)
+
 # フィラー（意味を持たない語）。長い語から先にマッチさせるため長さ降順で使用する。
 FILLER_WORDS = [
     "そのですね", "えーっと", "えっとー", "あのー", "えっと", "あの", "ええと",
@@ -108,6 +115,11 @@ def strip_timestamps(line: str) -> str:
     for pattern in TIMESTAMP_PATTERNS:
         line = pattern.sub("", line)
     return line
+
+
+def remove_intercharacter_jp_spaces(line: str) -> str:
+    """仮名・漢字の文字間に紛れ込んだ不要なスペースを除去する(Limitlessの既知の癖)。"""
+    return INTERCHAR_JP_SPACE_PATTERN.sub("", line)
 
 
 def strip_speaker_header(line: str) -> tuple[str, bool]:
@@ -189,6 +201,7 @@ def clean_text(raw_text: str, dict_pairs: list[tuple[str, str]],
         "removed_duplicate_lines": 0,
         "dict_replacements": 0,
         "anonymization_replacements": 0,
+        "intercharacter_space_fixes": 0,
     }
 
     lines = raw_text.splitlines()
@@ -198,6 +211,11 @@ def clean_text(raw_text: str, dict_pairs: list[tuple[str, str]],
     for line in lines:
         line, stripped_unknown = strip_speaker_header(line.strip())
         line = strip_timestamps(line).strip()
+
+        despaced = remove_intercharacter_jp_spaces(line)
+        if despaced != line:
+            stats["intercharacter_space_fixes"] += 1
+        line = despaced
 
         if stripped_unknown:
             stats["stripped_unknown_labels"] += 1

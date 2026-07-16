@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# SFA受信箱: 音声・Word原本はリポジトリに含めない（テキスト化後は00_raw_logsへ）
+SFA/00_inbox/*
+!SFA/00_inbox/.gitkeep
+!SFA/00_inbox/_done/
+SFA/00_inbox/_done/*
+!SFA/00_inbox/_done/.gitkeep
